@@ -27,9 +27,14 @@ impl DirCopy {
             Err(e) => return Err(e.to_string()),
         };
 
+        let read_dir = match read_dir(&path_buf).await {
+            Ok(rd) => rd,
+            Err(e) => return Err(e.to_string()),
+        };
+
         Ok(DirCopy {
-            source_path: path_buf,
-            path_stack: Vec::new(),
+            source_path: path_buf.clone(),
+            path_stack: Vec::from([(read_dir, path_buf)]),
         })
     }
 
@@ -40,6 +45,7 @@ impl DirCopy {
             while let Ok(entry_attempt) = dir_entries.next_entry().await {
                 if let Some(entry) = entry_attempt {
                     let entry_path = entry.path();
+
                     println!("{:?}", &entry_path);
 
                     // push dir_entries back onto the stack
@@ -51,7 +57,10 @@ impl DirCopy {
                     //  add read dir and absolute back onto stack
 
                     // return absoluite dir path
+                    continue;
                 }
+
+                break;
             }
         }
 
