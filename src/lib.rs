@@ -48,6 +48,11 @@ impl DirCopy {
 
                     println!("{:?}", &entry_path);
 
+                    if entry_path.is_file() {
+                        self.path_stack.push((dir_entries, dir_path));
+
+                        return Some(entry_path);
+                    }
                     // push dir_entries back onto the stack
 
                     // if file return path
