@@ -10,5 +10,7 @@ async fn walk_the_dog() {
         Err(e) => return assert_eq!("dir copy failed", "dir_copy failed"),
     };
 
-    while let Some(path_buf) = dir_copy.next_entry().await {}
+    while let Some(path_buf) = dir_copy.next_entry().await {
+        println!("{:?}", path_buf);
+    }
 }
