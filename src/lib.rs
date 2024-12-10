@@ -71,61 +71,75 @@ impl DirWalk {
 
 pub struct DirCopy {
     source_path: PathBuf,
-    path_stack: Vec<(ReadDir, PathBuf)>,
+    dest_path: PathBuf,
+    path_stack: Vec<ReadDir>,
 }
 
+// want to pair a destination path
+
+// get tail after source_path, append to dest_path
+
 impl DirCopy {
-    pub async fn try_from_path(source_path: &PathBuf) -> Result<DirCopy, String> {
-        let path_buf = match path::absolute(source_path) {
+    pub async fn try_from_path(
+        source_path: &PathBuf,
+        dest_path: &PathBuf,
+    ) -> Result<DirCopy, String> {
+        let source_path_buf = match path::absolute(source_path) {
             Ok(p) => p,
             Err(e) => return Err(e.to_string()),
         };
 
-        let dir_entries = match read_dir(&path_buf).await {
+        let dest_path_buf = match path::absolute(dest_path) {
+            Ok(p) => p,
+            Err(e) => return Err(e.to_string()),
+        };
+
+        let dir_entries = match read_dir(&source_path_buf).await {
             Ok(rd) => rd,
             Err(e) => return Err(e.to_string()),
         };
 
         Ok(DirCopy {
-            source_path: path_buf.clone(),
-            path_stack: Vec::from([(dir_entries, path_buf)]),
+            source_path: source_path_buf,
+            dest_path: dest_path_buf,
+            path_stack: Vec::from([dir_entries]),
         })
     }
 
-    pub async fn next_entry(&mut self) -> Option<PathBuf> {
-        while let Some((mut dir_entries, dir_path)) = self.path_stack.pop() {
+    pub async fn next_entry(&mut self) -> Option<(PathBuf, PathBuf)> {
+        while let Some(mut dir_entries) = self.path_stack.pop() {
             // pop path stack
 
             while let Ok(entry_attempt) = dir_entries.next_entry().await {
                 if let Some(entry) = entry_attempt {
                     let entry_path = entry.path();
-                    if entry_path.is_file() {
-                        self.path_stack.push((dir_entries, dir_path));
 
-                        return Some(entry_path);
+                    // strip prefix, join dest_path
+                    let suffix = match entry_path.strip_prefix(&self.source_path) {
+                        Ok(p) => p,
+                        _ => continue,
+                    };
+
+                    let target_path = self.dest_path.join(suffix);
+
+                    if entry_path.is_file() {
+                        self.path_stack.push(dir_entries);
+
+                        return Some((entry_path, target_path));
                     }
 
                     if entry_path.is_dir() {
-                        self.path_stack.push((dir_entries, dir_path));
+                        self.path_stack.push(dir_entries);
 
                         let next_dir_entries = match read_dir(&entry_path).await {
                             Ok(rd) => rd,
                             Err(e) => return None,
                         };
 
-                        self.path_stack.push((next_dir_entries, entry_path.clone()));
+                        self.path_stack.push(next_dir_entries);
 
-                        return Some(entry_path);
+                        return Some((entry_path, target_path));
                     }
-                    // push dir_entries back onto the stack
-
-                    // if file return path
-
-                    //  if dir
-                    //  read dir
-                    //  add read dir and absolute back onto stack
-
-                    // return absoluite dir path
                 }
 
                 break;
