@@ -11,12 +11,39 @@ use tokio::fs::{read_dir, ReadDir};
 // depth first
 // can have max depth
 
-/*
-    one stack, stack of iterators
-*/
+async fn get_pathbufs_from_dir(dir_entries: &mut ReadDir) -> Vec<PathBuf> {
+    let mut entries = Vec::new();
+
+    while let Ok(entry_attempt) = dir_entries.next_entry().await {
+        if let Some(entry) = entry_attempt {
+            entries.push(entry.path());
+            continue;
+        }
+
+        break;
+    }
+
+    entries
+}
+
+struct DirStackBit {
+    entries: Vec<PathBuf>,
+    index: usize,
+}
+
+impl DirStackBit {
+    pub fn next(&mut self) -> Option<PathBuf> {
+        if let Some(pb) = self.entries.get(self.index) {
+            self.index += 1;
+            return Some(pb.clone());
+        }
+
+        None
+    }
+}
 
 pub struct DirWalk {
-    path_stack: Vec<ReadDir>,
+    path_stack: Vec<DirStackBit>,
 }
 
 impl DirWalk {
@@ -27,41 +54,44 @@ impl DirWalk {
         };
 
         let dir_entries = match read_dir(&path_buf).await {
-            Ok(rd) => rd,
+            Ok(mut rd) => get_pathbufs_from_dir(&mut rd).await,
             Err(e) => return Err(e.to_string()),
         };
 
         Ok(DirWalk {
-            path_stack: Vec::from([dir_entries]),
+            path_stack: Vec::from([DirStackBit {
+                entries: dir_entries,
+                index: 0,
+            }]),
         })
     }
 
     pub async fn next_entry(&mut self) -> Option<PathBuf> {
         while let Some(mut dir_entries) = self.path_stack.pop() {
-            while let Ok(entry_attempt) = dir_entries.next_entry().await {
-                if let Some(entry) = entry_attempt {
-                    let entry_path = entry.path();
-                    if entry_path.is_file() {
-                        self.path_stack.push(dir_entries);
+            while let Some(entry) = dir_entries.next() {
+                if entry.is_file() {
+                    self.path_stack.push(dir_entries);
 
-                        return Some(entry_path);
-                    }
-
-                    if entry_path.is_dir() {
-                        self.path_stack.push(dir_entries);
-
-                        let next_dir_entries = match read_dir(&entry_path).await {
-                            Ok(rd) => rd,
-                            Err(e) => return None,
-                        };
-
-                        self.path_stack.push(next_dir_entries);
-
-                        return Some(entry_path);
-                    }
+                    return Some(entry);
                 }
 
-                break;
+                if entry.is_dir() {
+                    self.path_stack.push(dir_entries);
+
+                    let mut next_read_dir = match read_dir(&entry).await {
+                        Ok(rd) => rd,
+                        Err(e) => return None,
+                    };
+
+                    let entries = get_pathbufs_from_dir(&mut next_read_dir).await;
+
+                    self.path_stack.push(DirStackBit {
+                        entries: entries,
+                        index: 0,
+                    });
+
+                    return Some(entry);
+                }
             }
         }
 
