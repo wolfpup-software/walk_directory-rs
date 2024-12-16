@@ -32,6 +32,18 @@ struct DirStackBit {
 }
 
 impl DirStackBit {
+    pub async fn new(path_buf: &PathBuf) -> Result<DirStackBit, String> {
+        let dir_entries = match read_dir(path_buf).await {
+            Ok(mut rd) => get_pathbufs_from_dir(&mut rd).await,
+            Err(e) => return Err(e.to_string()),
+        };
+
+        Ok(DirStackBit {
+            entries: dir_entries,
+            index: 0,
+        })
+    }
+
     pub fn next(&mut self) -> Option<PathBuf> {
         if let Some(pb) = self.entries.get(self.index) {
             self.index += 1;
@@ -53,16 +65,13 @@ impl DirWalk {
             Err(e) => return Err(e.to_string()),
         };
 
-        let dir_entries = match read_dir(&path_buf).await {
-            Ok(mut rd) => get_pathbufs_from_dir(&mut rd).await,
-            Err(e) => return Err(e.to_string()),
+        let dir_stack_bit = match DirStackBit::new(&path_buf).await {
+            Ok(de) => de,
+            Err(e) => return Err(e),
         };
 
         Ok(DirWalk {
-            path_stack: Vec::from([DirStackBit {
-                entries: dir_entries,
-                index: 0,
-            }]),
+            path_stack: Vec::from([dir_stack_bit]),
         })
     }
 
