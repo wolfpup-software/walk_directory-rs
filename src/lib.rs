@@ -32,7 +32,7 @@ struct DirStackBit {
 }
 
 impl DirStackBit {
-    pub async fn new(path_buf: &PathBuf) -> Result<DirStackBit, String> {
+    pub async fn try_from(path_buf: &PathBuf) -> Result<DirStackBit, String> {
         let dir_entries = match read_dir(path_buf).await {
             Ok(mut rd) => get_pathbufs_from_dir(&mut rd).await,
             Err(e) => return Err(e.to_string()),
@@ -65,7 +65,7 @@ impl DirWalk {
             Err(e) => return Err(e.to_string()),
         };
 
-        let dir_stack_bit = match DirStackBit::new(&path_buf).await {
+        let dir_stack_bit = match DirStackBit::try_from(&path_buf).await {
             Ok(de) => de,
             Err(e) => return Err(e),
         };
@@ -87,17 +87,12 @@ impl DirWalk {
                 if entry.is_dir() {
                     self.path_stack.push(dir_entries);
 
-                    let mut next_read_dir = match read_dir(&entry).await {
+                    let mut next_stack_bit = match DirStackBit::try_from(&entry).await {
                         Ok(rd) => rd,
                         Err(e) => return None,
                     };
 
-                    let entries = get_pathbufs_from_dir(&mut next_read_dir).await;
-
-                    self.path_stack.push(DirStackBit {
-                        entries: entries,
-                        index: 0,
-                    });
+                    self.path_stack.push(next_stack_bit);
 
                     return Some(entry);
                 }
