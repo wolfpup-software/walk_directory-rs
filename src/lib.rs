@@ -83,9 +83,9 @@ impl DirWalk {
                 if entry.is_dir() {
                     self.path_stack.push(dir_entries);
 
-                    let mut next_stack_bit = match DirStackBit::try_from(&entry).await {
+                    let next_stack_bit = match DirStackBit::try_from(&entry).await {
                         Ok(rd) => rd,
-                        Err(e) => return None,
+                        _ => return None,
                     };
 
                     self.path_stack.push(next_stack_bit);
@@ -137,8 +137,7 @@ impl DirCopy {
             while let Some(entry_path) = dir_entries.next() {
                 let suffix = match entry_path.strip_prefix(&self.source_path) {
                     Ok(p) => p,
-                    // it is assumed that DirCopy only works with absolute filepaths
-                    Err(e) => continue,
+                    _ => continue,
                 };
 
                 let target_path = self.dest_path.join(suffix);
@@ -154,7 +153,7 @@ impl DirCopy {
 
                     let next_dir_stack_bit = match DirStackBit::try_from(&entry_path).await {
                         Ok(de) => de,
-                        Err(e) => return None,
+                        _ => return None,
                     };
 
                     self.path_stack.push(next_dir_stack_bit);
